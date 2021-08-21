@@ -2,10 +2,11 @@ from django.shortcuts import render
 
 # Create your views here.
 from django.http import HttpResponse
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login
-from .forms import LoginForm, UserRegistrationForm
+from .forms import LoginForm, UserRegistrationForm, UserEditForm, ProfileEditForm
 from django.contrib.auth.decorators import login_required
+from .models import Profile
 
 
 # this view I created for my custom login page. But since I used django auth view,
@@ -21,7 +22,7 @@ def user_login(request):
             if user is not None:
                 if user.is_active:
                     login(request, user)
-                    return HttpResponse('Authenticated '\
+                    return HttpResponse('Authenticated ' \
                                         'successfully')
                 else:
                     return HttpResponse('Disabled account')
@@ -48,8 +49,12 @@ def register(request):
             # Set the chosen password
             new_user.set_password(
                 user_form.cleaned_data['password'])
+
             # Save the User object
             new_user.save()
+
+            # Create the user profile
+            Profile.objects.create(user=new_user)
             return render(request,
                           'account/register_done.html',
                           {'new_user': new_user})
@@ -58,3 +63,30 @@ def register(request):
     return render(request,
                   'account/register.html',
                   {'user_form': user_form})
+
+
+@login_required
+def edit(request):
+    if request.method == 'POST':
+        user_form = UserEditForm(instance=request.user,
+                                 data=request.POST)
+        profile_form = ProfileEditForm(
+            instance=request.user.profile,
+            data=request.POST,
+            files=request.FILES)
+        if user_form.is_valid() and profile_form.is_valid():
+            user_form.save()
+            profile_form.save()
+
+        # after changes, redirect to dashboard
+        return redirect(dashboard)
+    else:
+        try:
+            user_form = UserEditForm(instance=request.user)
+            profile_form = ProfileEditForm(instance=request.user.profile)
+        except Exception:
+            return render(request, 'account/exception.html', {'message': 'Appears this user does not have a profile.'})
+    return render(request,
+                  'account/edit.html',
+                  {'user_form': user_form,
+                   'profile_form': profile_form})
